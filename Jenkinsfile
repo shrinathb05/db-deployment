@@ -15,7 +15,10 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: "${params.TAG_NAME}", url: "${env.GIT_REPO}"
+                checkout([$class: 'GitSCM',
+                    branches: [[name: "refs/tags/${params.TAG_NAME}"]],
+                    userRemoteConfigs: [[url: "${env.GIT_REPO}"]]
+                ])
             }
         }
 

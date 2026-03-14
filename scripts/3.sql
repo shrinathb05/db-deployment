@@ -1,0 +1,2 @@
+USE jenkins
+show tables;
