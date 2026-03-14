@@ -35,9 +35,11 @@ pipeline {
 
         stage('Execute SQL Scripts') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'mysql-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')]) {
+                    withCredentials([usernamePassword(credentialsId: 'mysql-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')]) {
                     sh '''
+                        #!/bin/bash
                         echo "Starting SQL Execution" > execution.log
+                        echo "${SCRIPT_SEQUENCE}" > seq.txt
                         while read file; do
                             echo "Running $file" >> execution.log
                             mysql -h ${DB_HOST} -u $DB_USER -p$DB_PASS ${DATABASE_NAME} < scripts/$file >> execution.log 2>&1
@@ -45,7 +47,7 @@ pipeline {
                                 echo "FAILED at $file" >> execution.log
                                 exit 1
                             fi
-                        done <<< "${SCRIPT_SEQUENCE}"
+                        done < seq.txt
                     '''
                 }
             }
