@@ -1,0 +1,1 @@
+INSERT INTO unknown_table VALUES (1);
