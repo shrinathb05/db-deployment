@@ -1,15 +1,21 @@
 #!/bin/bash
-# Usage: ./run_mysql.sh DB_HOST DB_USER DB_PASS DB_NAME SQL_FILE
+$1 = DB_HOST
+$2 = DB_USER
+$3 = DB_PASS
+$4 = DATABASE
+$5 = SQL_FILE
 
-DB_HOST=$1
-DB_USER=$2
-DB_PASS=$3
-DB_NAME=$4
-SQL_FILE=$5
+set -euo pipefail
 
-if [ ! -f "$SQL_FILE" ]; then
-    echo "SQL file $SQL_FILE not found!"
+LOG_FILE="${5%.sql}.log"
+
+if [ ! -f "$5" ]; then
+    echo "SQL file $5 not found!" | tee -a "$LOG_FILE"
     exit 1
 fi
 
-mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_FILE"
+echo "Running $5 on $4@$1" | tee -a "$LOG_FILE"
+
+mysql -h "$1" -u "$2" -p"$3" "$4" < "$5" >> "$LOG_FILE" 2>&1
+
+echo "$5 executed successfully" | tee -a "$LOG_FILE"
