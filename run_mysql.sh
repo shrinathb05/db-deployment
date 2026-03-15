@@ -1,21 +1,23 @@
 #!/bin/bash
-$1 = DB_HOST
-$2 = DB_USER
-$3 = DB_PASS
-$4 = DATABASE
-$5 = SQL_FILE
+DB_HOST=$1
+DB_USER=$2
+DB_PASS=$3
+DB_NAME=$4
+SQL_FILE=$5
 
 set -euo pipefail
 
-LOG_FILE="${5%.sql}.log"
+LOG_FILE="${SQL_FILE%.sql}.log"
 
-if [ ! -f "$5" ]; then
-    echo "SQL file $5 not found!" | tee -a "$LOG_FILE"
+if [ ! -f "$SQL_FILE" ]; then
+    echo "SQL file $SQL_FILE not found!" | tee -a "$LOG_FILE"
     exit 1
 fi
 
-echo "Running $5 on $4@$1" | tee -a "$LOG_FILE"
+echo "Running $SQL_FILE on $DB_NAME@$DB_HOST" | tee -a "$LOG_FILE"
 
-mysql -h "$1" -u "$2" -p"$3" "$4" < "$5" >> "$LOG_FILE" 2>&1
+mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
+
+# mysql -h "$1" -u "$2" -p"$3" "$4" < "$5" 
 
 echo "$5 executed successfully" | tee -a "$LOG_FILE"
