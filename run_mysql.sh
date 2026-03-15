@@ -16,7 +16,9 @@ fi
 
 echo "Running $SQL_FILE on $DB_NAME@$DB_HOST" | tee -a "$LOG_FILE"
 
-mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
+mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_FILE" 
+
+# >> "$LOG_FILE" 2>&1
 
 # mysql -h "$1" -u "$2" -p"$3" "$4" < "$5" 
 
