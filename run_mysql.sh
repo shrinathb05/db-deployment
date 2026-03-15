@@ -5,21 +5,28 @@ DB_PASS=$3
 DB_NAME=$4
 SQL_FILE=$5
 
-set -euo pipefail
+set -uo pipefail # Removed -e so we can handle the exit code manually for logging
 
-LOG_FILE="${SQL_FILE%.sql}.log"
+# Create a logs directory if it doesn't exist
+mkdir -p ./logs
 
-if [ ! -f "$SQL_FILE" ]; then
-    echo "SQL file $SQL_FILE not found!" | tee -a "$LOG_FILE"
-    exit 1
+# Define log file name with timestamp
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+LOG_FILE="./logs/${SQL_FILE%.sql}_${TIMESTAMP}.log"
+
+echo "===== Starting Execution of $SQL_FILE =====" | tee -a "$LOG_FILE"
+echo "Target: $DB_NAME @ $DB_HOST" | tee -a "$LOG_FILE"
+echo "Time: $(date)" | tee -a "$LOG_FILE"
+
+# Run MySQL and capture EVERYTHING (stdout and stderr) to the log file
+mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "SUCCESS: $SQL_FILE executed perfectly." | tee -a "$LOG_FILE"
+    exit 0
+else
+    echo "ERROR: $SQL_FILE failed with exit code $EXIT_CODE." | tee -a "$LOG_FILE"
+    echo "Check $LOG_FILE for details."
+    exit $EXIT_CODE
 fi
-
-echo "Running $SQL_FILE on $DB_NAME@$DB_HOST" | tee -a "$LOG_FILE"
-
-mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_FILE" 
-
-# >> "$LOG_FILE" 2>&1
-
-# mysql -h "$1" -u "$2" -p"$3" "$4" < "$5" 
-
-echo "$5 executed successfully" | tee -a "$LOG_FILE"
