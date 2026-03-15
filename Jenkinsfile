@@ -1,56 +1,44 @@
 pipeline {
-
-    agent { label 'db-agent' }
+    agent {label 'db-agent'}
 
     parameters {
         string(name: 'TAG_NAME', description: 'Git Tag to deploy')
-
-        choice(
-            name: 'DB_HOST',
-            choices: ['54.157.245.234','10.10.10.20','10.10.10.30'],
-            description: 'Select Database Server'
-        )
-
-        choice(
-            name: 'DATABASE_NAME',
-            choices: ['jenkins','devdb','testdb','proddb'],
-            description: 'Select Database'
-        )
-
-        string(
-            name: 'BACKUP_SCRIPT',
-            description: 'Backup SQL filename (example: backup.sql)'
-        )
-
-        text(
-            name: 'EXECUTION_SCRIPTS',
-            description: 'Execution scripts in order (example:\n1.sql\n2.sql\n3.sql)'
-        )
+        choice(name: 'DB_HOST', choices: ['54.226.206.161','10.10.10.20','10.10.10.30'], description: 'Select Database Server')
+        choice(name: 'DATABASE_NAME', choices: ['jenkins','devdb','testdb','proddb'], description: 'Select Database')
+        string(name: 'BACKUP_SCRIPT', description: 'Backup SQL filename (example: backup.sql)')
     }
 
     environment {
-        GIT_REPO = "https://github.com/shrinathb05/db-deployment.git"
         WORK_DIR = "/home/jenkins/var/work/mysql"
+        GIT_REPO = "https://github.com/shrinathb05/db-deployment.git"
     }
 
-    stages {
 
-        stage('Clean Working Directory') {
+    stages {
+        stage('Clean and prepare workspace') {
             steps {
+                echo "Cleaning workspace: ${WORK_DIR}"
                 sh """
-                mkdir -p ${WORK_DIR}
-                rm -rf ${WORK_DIR}/*
+                    mkdir -p "${WORK_DIR}"
+                    rm -rf "${WORK_DIR}/*"
+                    echo "Workspace cleaned and ready."
+                    ls -l ${WORK_DIR}
                 """
             }
         }
 
-        stage('Checkout Tag') {
+        stage ('Checkout Git Tag') {
             steps {
                 dir("${WORK_DIR}") {
+                    echo "Checking out tag: ${params.TAG_NAME}"
+
                     checkout([$class: 'GitSCM',
                         branches: [[name: "refs/tags/${params.TAG_NAME}"]],
                         userRemoteConfigs: [[url: "${env.GIT_REPO}"]]
                     ])
+
+                    echo "Files in workspace after checkout:"
+                    sh "ls -l ${WORK_DIR}"
                 }
             }
         }
@@ -63,63 +51,37 @@ pipeline {
                         usernameVariable: 'DB_USER',
                         passwordVariable: 'DB_PASS'
                     )]) {
-
                         sh """
-                        set -e
+                            set -e
 
-                        echo "===== BACKUP START =====" > backup.log
-                        echo "Files in workspace:" >> backup.log
-                        ls -l >> backup.log
+                            echo "===== BACKUP START =====" > backup.log
+                            echo "Files in workspace:" >> backup.log
+                            ls -l >> backup.log
 
-                        if [ ! -f "${params.BACKUP_SCRIPT}" ]; then
-                            echo "Backup script ${params.BACKUP_SCRIPT} not found!" >> backup.log
-                            exit 1
-                        fi
-
-                        echo "Running backup script ${params.BACKUP_SCRIPT}" >> backup.log
-
-                        ./run_mysql.sh ${params.DB_HOST} \$DB_USER \$DB_PASS ${params.DATABASE_NAME} ${params.BACKUP_SCRIPT} >> backup.log 2>&1
-
-                        echo "Backup completed successfully" >> backup.log
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Execute Deployment Scripts') {
-            steps {
-                dir("${WORK_DIR}") {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'mysql-creds',
-                        usernameVariable: 'DB_USER',
-                        passwordVariable: 'DB_PASS'
-                    )]) {
-
-                        sh """
-                        set -e
-
-                        echo "===== SCRIPT EXECUTION START =====" > execution.log
-
-                        echo "${params.EXECUTION_SCRIPTS}" > script_list.txt
-
-                        while IFS= read -r script || [ -n "\$script" ]
-                        do
-                            echo "--------------------------------" >> execution.log
-                            echo "Executing \$script" >> execution.log
-
-                            if [ ! -f "\$script" ]; then
-                                echo "Script \$script not found!" >> execution.log
+                            if [ ! -f "${params.BACKUP_SCRIPT}" ]; then
+                                echo "Backup script ${params.BACKUP_SCRIPT} not found!" >> backup.log
                                 exit 1
                             fi
 
-                            ./run_mysql.sh ${params.DB_HOST} \$DB_USER \$DB_PASS ${params.DATABASE_NAME} "\$script" >> execution.log 2>&1
+                            echo "Creating temporary my.cnf for secure connection..." >> backup.log
 
-                            echo "\$script executed successfully" >> execution.log
+                            cat > ~/.my.cnf <<EOF
+                                [client]
+                                user=\$DB_USER
+                                password=\$DB_PASS
+                                host=${params.DB_HOST}
+                                database=${params.DATABASE_NAME}
+                                EOF
 
-                        done < script_list.txt
+                            chmod 600 ~/.my.cnf
 
-                        echo "All scripts executed successfully" >> execution.log
+                            echo "Running backup script ${params.BACKUP_SCRIPT}" >> backup.log
+                            mysql < ${params.BACKUP_SCRIPT} >> backup.log 2>&1
+
+                            echo "Backup completed successfully" >> backup.log
+
+                            echo "Removing temporary my.cnf" >> backup.log
+                            rm -f ~/.my.cnf
                         """
                     }
                 }
@@ -129,46 +91,11 @@ pipeline {
     }
 
     post {
-
         success {
-            emailext(
-                subject: "DB Deployment SUCCESS - ${params.TAG_NAME}",
-                body: """
-Database Deployment Successful
-
-Tag: ${params.TAG_NAME}
-Server: ${params.DB_HOST}
-Database: ${params.DATABASE_NAME}
-
-Check attached logs.
-""",
-                attachmentsPattern: "*.log",
-                to: "team@company.com"
-            )
+            echo "Step 1 completed successfully. Workspace is ready."
         }
-
         failure {
-            emailext(
-                subject: "DB Deployment FAILED - ${params.TAG_NAME}",
-                body: """
-Database Deployment FAILED
-
-Tag: ${params.TAG_NAME}
-Server: ${params.DB_HOST}
-Database: ${params.DATABASE_NAME}
-
-Check attached logs.
-""",
-                attachmentsPattern: "*.log",
-                to: "team@company.com"
-            )
-        }
-
-        always {
-            sh """
-            echo "Cleaning working directory..."
-            rm -rf ${WORK_DIR}/*
-            """
+            echo "Step 1 failed. Check workspace permissions or paths."
         }
     }
 }
