@@ -98,5 +98,11 @@ pipeline {
                 }
             }
         }
+
+        stage('Clean Directory After Deployment') {
+            steps {
+                sh "rm -rf ${WORK_DIR}/*"
+            }
+        }
     }
 }

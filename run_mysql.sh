@@ -12,7 +12,8 @@ mkdir -p ./logs
 
 # Define log file name with timestamp
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_FILE="./logs/${SQL_FILE%.sql}_${TIMESTAMP}.log"
+LOG_DIR="/home/ubuntu/var/work/logs/
+LOG_FILE="${LOG_DIR}/${SQL_FILE%.sql}_${TIMESTAMP}.log"
 
 echo "===== Starting Execution of $SQL_FILE =====" | tee -a "$LOG_FILE"
 echo "Target: $DB_NAME @ $DB_HOST" | tee -a "$LOG_FILE"
