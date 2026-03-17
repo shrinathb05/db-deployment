@@ -7,12 +7,12 @@ SQL_FILE=$5
 
 set -uo pipefail
 
-# Create a logs directory if it doesn't exist
-mkdir -p ./logs
+# Define and create the log directory correctly
+LOG_DIR="/home/ubuntu/var/work/logs"
+mkdir -p "$LOG_DIR"
 
 # Define log file name with timestamp
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_DIR="/home/ubuntu/var/work/logs/
 LOG_FILE="${LOG_DIR}/${SQL_FILE%.sql}_${TIMESTAMP}.log"
 
 echo "===== Starting Execution of $SQL_FILE =====" | tee -a "$LOG_FILE"
@@ -20,15 +20,13 @@ echo "Target: $DB_NAME @ $DB_HOST" | tee -a "$LOG_FILE"
 echo "Time: $(date)" | tee -a "$LOG_FILE"
 
 # --- SECURITY IMPROVEMENT ---
-# We export the password to an environment variable. 
-# The mysql client looks for this variable automatically.
 export MYSQL_PWD="$DB_PASS"
 
-# Run MySQL without the -p flag in the command string
+# Run MySQL with -v -v to see the code AND the records in the log
 mysql -v -v -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
 EXIT_CODE=$?
 
-# Clear the password from the environment immediately after use
+# Clear the password
 unset MYSQL_PWD
 
 if [ $EXIT_CODE -eq 0 ]; then
