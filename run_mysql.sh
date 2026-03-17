@@ -24,7 +24,7 @@ echo "Time: $(date)" | tee -a "$LOG_FILE"
 export MYSQL_PWD="$DB_PASS"
 
 # Run MySQL without the -p flag in the command string
-mysql -v -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
+mysql -v -v -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
 EXIT_CODE=$?
 
 # Clear the password from the environment immediately after use
