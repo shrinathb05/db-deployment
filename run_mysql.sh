@@ -5,7 +5,7 @@ DB_PASS=$3
 DB_NAME=$4
 SQL_FILE=$5
 
-set -uo pipefail # Removed -e so we can handle the exit code manually for logging
+set -uo pipefail
 
 # Create a logs directory if it doesn't exist
 mkdir -p ./logs
@@ -18,9 +18,17 @@ echo "===== Starting Execution of $SQL_FILE =====" | tee -a "$LOG_FILE"
 echo "Target: $DB_NAME @ $DB_HOST" | tee -a "$LOG_FILE"
 echo "Time: $(date)" | tee -a "$LOG_FILE"
 
-# Run MySQL and capture EVERYTHING (stdout and stderr) to the log file
-mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
+# --- SECURITY IMPROVEMENT ---
+# We export the password to an environment variable. 
+# The mysql client looks for this variable automatically.
+export MYSQL_PWD="$DB_PASS"
+
+# Run MySQL without the -p flag in the command string
+mysql -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
 EXIT_CODE=$?
+
+# Clear the password from the environment immediately after use
+unset MYSQL_PWD
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo "SUCCESS: $SQL_FILE executed perfectly." | tee -a "$LOG_FILE"
