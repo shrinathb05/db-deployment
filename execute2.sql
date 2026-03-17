@@ -1,5 +1,5 @@
 INSERT INTO employee (name, department)
 VALUES
-('John', 'IT'),
-('Alice', 'HR'),
-('Bob', 'Finance');
+('Ravi', 'IT'),
+('Omkar', 'HR'),
+('Shyna', 'Finance');
