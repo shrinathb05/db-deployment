@@ -8,12 +8,18 @@ SQL_FILE=$5
 set -uo pipefail
 
 # Define and create the log directory correctly
-LOG_DIR="/home/ubuntu/var/work/logs"
+LOG_DIR="/home/ubuntu/var/work/logs/mysql"
 mkdir -p "$LOG_DIR"
 
 # Define log file name with timestamp
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="${LOG_DIR}/${SQL_FILE%.sql}_${TIMESTAMP}.log"
+
+# Changed 'exit 0' to 'exit 1' because you want the stage to FAIL if the file is missing
+if [ ! -f "$SQL_FILE" ]; then
+    echo "ERROR: SQL File '$SQL_FILE' not found in $(pwd)" | tee -a "$LOG_FILE"
+    exit 1
+fi
 
 echo "===== Starting Execution of $SQL_FILE =====" | tee -a "$LOG_FILE"
 echo "Target: $DB_NAME @ $DB_HOST" | tee -a "$LOG_FILE"
