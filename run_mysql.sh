@@ -7,39 +7,41 @@ SQL_FILE=$5
 
 set -uo pipefail
 
-# Define and create the log directory correctly
+# Ensure work directory is the base for finding files
 LOG_DIR="/home/ubuntu/var/work/logs/mysql"
 mkdir -p "$LOG_DIR"
 
-# Define log file name with timestamp
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_FILE="${LOG_DIR}/${SQL_FILE%.sql}_${TIMESTAMP}.log"
+# Adding DB_NAME to the log file helps distinguish logs if you run on different envs
+LOG_FILE="${LOG_DIR}/${DB_NAME}_${SQL_FILE%.sql}_${TIMESTAMP}.log"
 
-# Changed 'exit 0' to 'exit 1' because you want the stage to FAIL if the file is missing
 if [ ! -f "$SQL_FILE" ]; then
     echo "ERROR: SQL File '$SQL_FILE' not found in $(pwd)" | tee -a "$LOG_FILE"
     exit 1
 fi
 
 echo "===== Starting Execution of $SQL_FILE =====" | tee -a "$LOG_FILE"
-echo "Target: $DB_NAME @ $DB_HOST" | tee -a "$LOG_FILE"
-echo "Time: $(date)" | tee -a "$LOG_FILE"
+echo "Target Host: $DB_HOST" | tee -a "$LOG_FILE"
+echo "Database:    $DB_NAME" | tee -a "$LOG_FILE"
 
 # --- SECURITY IMPROVEMENT ---
 export MYSQL_PWD="$DB_PASS"
 
-# Run MySQL with -v -v to see the code AND the records in the log
-mysql -v -v -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
+# IMPROVED: Added --connect-timeout=10 for RDS stability
+# IMPROVED: Added --batch to ensure clean output for Jenkins logs
+mysql -v -v --connect-timeout=10 --batch -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" < "$SQL_FILE" >> "$LOG_FILE" 2>&1
 EXIT_CODE=$?
 
-# Clear the password
 unset MYSQL_PWD
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo "SUCCESS: $SQL_FILE executed perfectly." | tee -a "$LOG_FILE"
     exit 0
 else
+    # Output the last 10 lines of the error to Jenkins console immediately
+    echo "-------------------------------------------"
+    tail -n 10 "$LOG_FILE"
+    echo "-------------------------------------------"
     echo "ERROR: $SQL_FILE failed with exit code $EXIT_CODE." | tee -a "$LOG_FILE"
-    echo "Check $LOG_FILE for details."
     exit $EXIT_CODE
 fi
