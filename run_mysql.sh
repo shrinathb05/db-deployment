@@ -8,7 +8,7 @@ SQL_FILE=$5
 set -uo pipefail
 
 # Ensure work directory is the base for finding files
-LOG_DIR="/home/ubuntu/var/work/logs/mysql"
+LOG_DIR="./logs/mysql"
 mkdir -p "$LOG_DIR"
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
