@@ -36,12 +36,14 @@ unset MYSQL_PWD
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo "SUCCESS: $SQL_FILE executed perfectly." | tee -a "$LOG_FILE"
+    echo "--- START OF SQL LOG ---"
+    cat "$LOG_FILE"  # <--- This prints it to the Jenkins Console
+    echo "--- END OF SQL LOG ---"
     exit 0
 else
-    # Output the last 10 lines of the error to Jenkins console immediately
-    echo "-------------------------------------------"
-    tail -n 10 "$LOG_FILE"
-    echo "-------------------------------------------"
-    echo "ERROR: $SQL_FILE failed with exit code $EXIT_CODE." | tee -a "$LOG_FILE"
+    echo "ERROR: $SQL_FILE failed." | tee -a "$LOG_FILE"
+    echo "--- START OF ERROR LOG ---"
+    cat "$LOG_FILE"  # <--- This ensures the failure reason is visible in Jenkins
+    echo "--- END OF ERROR LOG ---"
     exit $EXIT_CODE
 fi
