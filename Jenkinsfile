@@ -1,119 +1,154 @@
 pipeline {
-    agent {label 'agent' }
-    
-    // parameters {
-    //     string(name: 'TAG_NAME', defaultValue: 'v0.7', description: 'Git tag to deploy')
-        
-    //     choice(
-    //         name: 'DB_HOST',
-    //         choices: ['10.181.63.162', '10.181.63.132', '10.181.63.125'],
-    //         description: 'Select Database Server'
-    //     )
-        
-    //     choice(
-    //         name: 'DB_NAME',
-    //         choices: ['jenkins', 'DEV', 'PRE-PROD', 'PROD'],
-    //         description: 'Select Database NAME'
-    //     )
-        
-    //     string(
-    //         name: 'BACKUP_SCRIPT',
-    //         defaultValue: '',
-    //         description: 'e.g. backup.sql file'
-    //     )
-    //     text(
-    //         name: 'EXECUTE_SCRIPT',
-    //         defaultValue: '',
-    //         description: 'Provide the sequence of the file for execution'
-    //     )
-    // }
+    agent {
+        label 'agent'
+    }
     
     environment {
         GIT_REPO = "https://github.com/shrinathb05/db-deployment.git"
-        WORK_DIR = "/home/ubuntu/var/work/mysql"
+        NOTIFY_EMAIL = "shrinath7028@gmail.com"
     }
     
     stages {
         stage('Clean & Setup') {
             steps {
                 cleanWs()
-                sh """
-                    mkdir -p "${WORK_DIR}"
-                    rm -rf "${WORK_DIR}/*"
-                """
             }
         }
         
         stage('Checkout Tag') {
             steps {
-                dir("${WORK_DIR}") {
-                    checkout([$class: 'GitSCM',
-                        branches: [[name: "refs/tags/${params.TAG_NAME}"]],
-                        userRemoteConfigs: [[url: "${env.GIT_REPO}"]]
-                    ])
-                }
+                checkout([$class: 'GitSCM',
+                    branches: [[name: "refs/tags/${params.TAG_NAME}"]],
+                    userRemoteConfigs: [[url: "${env.GIT_REPO}"]]
+                ])
+                sh "chmod +x run_mysql.sh"
             }
         }
         
-        stage('Backup') {
-            steps {
-                dir("${WORK_DIR}") {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'mysql-creds',
-                        usernameVariable: 'DB_USER',
-                        passwordVariable: 'DB_PASS'
-                    )]) {
-                        script {
-                            // //1. Check Connectivity
-                            echo "Checking connectivity to ${params.DB_HOST}...."
-                            sh """
-                                timeout 5 bash -c 'cat < /dev/null > /dev/tcp/${params.DB_HOST}/3306' || (echo 'ERROR: Port 3306 unreachable'; exit 1)
-                                ls -lrt
-                            """
-
-                            echo "====== STARTING BACKUP (Optional) ======"
-                            
-                            // catchError allows the pipeline to continue even if this block fails
-                            catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                                if (params.BACKUP_SCRIPT == "" || params.BACKUP_SCRIPT == "none") {
-                                    echo "No backup name provided. Forcing failure to meet requirement..."
-                                    sh "exit 1" // This forces the stage to fail
-                                } else {
-                                    sh "bash run_mysql.sh ${params.DB_HOST} \$DB_USER \$DB_PASS ${params.DB_NAME} ${params.BACKUP_SCRIPT}"
-                                }
-                            }
-                        }
-                    }
-                }
+        stage('Backup / Pre-Execution') {
+            when {
+                expression { params.BACKUP_SCRIPT != '' && params.BACKUP_SCRIPT != 'none' }
             }
-        }
-        
-        stage('Execute') {
             steps {
-                dir("$WORK_DIR") {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'mysql-creds',
-                        usernameVariable: 'DB_USER',
-                        passwordVariable: 'DB_PASS'
-                    )]) {
-                        //1. Check Connectivity
-                        echo "Checking connectivity to ${params.DB_HOST}...."
+                withCredentials([usernamePassword(
+                    credentialsId: 'mysql-creds',
+                    usernameVariable: 'DB_USER',
+                    passwordVariable: 'DB_PASS'
+                )]) {
+                    script {
+                        echo "Checking connectivity to ${params.DB_HOST}:3306..."
                         sh """
                             timeout 5 bash -c 'cat < /dev/null > /dev/tcp/${params.DB_HOST}/3306' || (echo 'ERROR: Port 3306 unreachable'; exit 1)
-                            ls -lrt
                         """
-                        // 2. Execute Backup
-                        echo "====== STARTING BACKUP ======"
-                        sh "bash run_mysql.sh ${params.DB_HOST} \$DB_USER \$DB_PASS ${params.DB_NAME} ${params.EXECUTE_SCRIPT}"
+
+                        echo "====== STARTING BACKUP / PRE-EXECUTION ======"
+                        // DB_PASS is read directly from environment inside the script for security
+                        sh "bash run_mysql.sh '${params.DB_HOST}' '${DB_USER}' '${params.DB_NAME}' '${params.BACKUP_SCRIPT}'"
                     }
                 }
             }
         }
-
-        stage('Clean Directory After Deployment') {
+        
+        stage('Execute Patch') {
             steps {
-                sh "rm -rf ${WORK_DIR}/*"
+                withCredentials([usernamePassword(
+                    credentialsId: 'mysql-creds',
+                    usernameVariable: 'DB_USER',
+                    passwordVariable: 'DB_PASS'
+                )]) {
+                    script {
+                        echo "Checking connectivity to ${params.DB_HOST}:3306..."
+                        sh """
+                            timeout 5 bash -c 'cat < /dev/null > /dev/tcp/${params.DB_HOST}/3306' || (echo 'ERROR: Port 3306 unreachable'; exit 1)
+                        """
+
+                        echo "====== EXECUTING DATAFIX / PATCH ======"
+                        sh "bash run_mysql.sh '${params.DB_HOST}' '${DB_USER}' '${params.DB_NAME}' '${params.EXECUTE_SCRIPT}'"
+                    }
+                }
             }
+        }
+        
+        stage('Archive & Cleanup Workspace') {
+            steps {
+                script {
+                    echo "Archiving logs before workspace cleanup..."
+                    sh '''
+                        mkdir -p ./logs/mysql
+                        cp -u /home/ubuntu/logs/mysql/*.log ./logs/mysql/ 2>/dev/null || true
+                    '''
+                }
+                archiveArtifacts artifacts: 'logs/**/*.log', allowEmptyArchive: true
+                
+                echo "Cleaning workspace after log archive and execution complete..."
+                cleanWs()
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                // If a stage failed before capture, ensure any fresh logs from this build are copied
+                sh '''
+                    if [ ! -d "./build_logs" ] || [ -z "$(ls -A ./build_logs 2>/dev/null)" ]; then
+                        mkdir -p ./build_logs
+                        LATEST_LOGS=$(ls -t /home/ubuntu/logs/mysql/*.log 2>/dev/null | head -n 2)
+                        for f in $LATEST_LOGS; do
+                            cp "$f" ./build_logs/
+                        done
+                    fi
+                '''
+            }
+            archiveArtifacts artifacts: 'build_logs/*.log', allowEmptyArchive: true
+        }
+
+        success {
+            emailext (
+                to: '$DEFAULT_RECIPIENTS',
+                subject: "✅ [SUCCESS] DB Deployment - Build #${env.BUILD_NUMBER} (${params.DB_NAME})",
+                body: """
+                    <h3>Database Patch Deployment Succeeded</h3>
+                    <p><b>Job Name:</b> ${env.JOB_NAME}</p>
+                    <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
+                    <p><b>Target DB Host:</b> ${params.DB_HOST}</p>
+                    <p><b>Database:</b> ${params.DB_NAME}</p>
+                    <p><b>Backup Script:</b> ${params.BACKUP_SCRIPT ?: 'None'}</p>
+                    <p><b>Executed Script:</b> ${params.EXECUTE_SCRIPT}</p>
+                    <p><b>Git Tag:</b> ${params.TAG_NAME}</p>
+                    <p><b>Console URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                    <br/>
+                    <p><i>Attached: Both latest backup and patch execution logs for this build.</i></p>
+                """,
+                mimeType: 'text/html',
+                attachmentsPattern: 'build_logs/*.log'
+            )
+            echo "Email sent with current run logs. Cleaning workspace..."
+            cleanWs()
+        }
+
+        failure {
+            emailext (
+                to: '$DEFAULT_RECIPIENTS',
+                subject: "❌ [FAILED] DB Deployment - Build #${env.BUILD_NUMBER} (${params.DB_NAME})",
+                body: """
+                    <h3 style="color:red;">Database Patch Deployment Failed</h3>
+                    <p><b>Job Name:</b> ${env.JOB_NAME}</p>
+                    <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
+                    <p><b>Target DB Host:</b> ${params.DB_HOST}</p>
+                    <p><b>Database:</b> ${params.DB_NAME}</p>
+                    <p><b>Backup Script:</b> ${params.BACKUP_SCRIPT ?: 'None'}</p>
+                    <p><b>Executed Script:</b> ${params.EXECUTE_SCRIPT}</p>
+                    <p><b>Git Tag:</b> ${params.TAG_NAME}</p>
+                    <p><b>Console URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                    <br/>
+                    <p><i>Attached: Detailed execution error logs for this build.</i></p>
+                """,
+                mimeType: 'text/html',
+                attachmentsPattern: 'build_logs/*.log'
+            )
+            echo "Failure email sent with logs. Cleaning workspace..."
+            cleanWs()
         }
     }
 }
