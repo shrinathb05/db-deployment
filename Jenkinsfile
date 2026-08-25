@@ -4,7 +4,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'TAG_NAME', defaultValue: 'v2.4', description: 'Git Tag to checkout')
+        string(name: 'TAG_NAME', defaultValue: 'v2.5', description: 'Git Tag to checkout')
         string(name: 'DB_HOST', defaultValue: '10.41.222.183', description: 'Target DB Host IP')
         string(name: 'DB_NAME', defaultValue: 'app_test_db', description: 'Database Name')
         string(name: 'BACKUP_SCRIPT', defaultValue: '', description: 'Pre-patch backup or safety script (optional)')
