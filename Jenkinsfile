@@ -2,16 +2,24 @@ pipeline {
     agent {
         label 'agent'
     }
+
+    parameters {
+        string(name: 'TAG_NAME', defaultValue: 'v2.4', description: 'Git Tag to checkout')
+        string(name: 'DB_HOST', defaultValue: '10.41.222.183', description: 'Target DB Host IP')
+        string(name: 'DB_NAME', defaultValue: 'app_test_db', description: 'Database Name')
+        string(name: 'BACKUP_SCRIPT', defaultValue: '', description: 'Pre-patch backup or safety script (optional)')
+        text(name: 'EXECUTE_SCRIPTS', defaultValue: '01_create_table.sql\n02_insert_records.sql\n03_update_record.sql\n04_delete_record.sql', description: 'Enter SQL scripts (one per line) in execution order')
+    }
     
     environment {
         GIT_REPO = "https://github.com/shrinathb05/db-deployment.git"
-        NOTIFY_EMAIL = "shrinath7028@gmail.com"
     }
     
     stages {
         stage('Clean & Setup') {
             steps {
                 cleanWs()
+                sh 'mkdir -p ./build_logs'
             }
         }
         
@@ -27,7 +35,7 @@ pipeline {
         
         stage('Backup / Pre-Execution') {
             when {
-                expression { params.BACKUP_SCRIPT != '' && params.BACKUP_SCRIPT != 'none' }
+                expression { params.BACKUP_SCRIPT?.trim() != '' && params.BACKUP_SCRIPT?.trim() != 'none' }
             }
             steps {
                 withCredentials([usernamePassword(
@@ -41,15 +49,15 @@ pipeline {
                             timeout 5 bash -c 'cat < /dev/null > /dev/tcp/${params.DB_HOST}/3306' || (echo 'ERROR: Port 3306 unreachable'; exit 1)
                         """
 
-                        echo "====== STARTING BACKUP / PRE-EXECUTION ======"
-                        // DB_PASS is read directly from environment inside the script for security
-                        sh "bash run_mysql.sh '${params.DB_HOST}' '${DB_USER}' '${params.DB_NAME}' '${params.BACKUP_SCRIPT}'"
+                        def backupFile = params.BACKUP_SCRIPT.trim()
+                        echo "====== STARTING BACKUP: ${backupFile} ======"
+                        sh "bash run_mysql.sh '${params.DB_HOST}' '${DB_USER}' '${params.DB_NAME}' '${backupFile}'"
                     }
                 }
             }
         }
         
-        stage('Execute Patch') {
+        stage('Execute Patch(es)') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'mysql-creds',
@@ -62,44 +70,24 @@ pipeline {
                             timeout 5 bash -c 'cat < /dev/null > /dev/tcp/${params.DB_HOST}/3306' || (echo 'ERROR: Port 3306 unreachable'; exit 1)
                         """
 
-                        echo "====== EXECUTING DATAFIX / PATCH ======"
-                        sh "bash run_mysql.sh '${params.DB_HOST}' '${DB_USER}' '${params.DB_NAME}' '${params.EXECUTE_SCRIPT}'"
+                        // Split multiline input into individual scripts and run sequentially
+                        def scriptList = params.EXECUTE_SCRIPTS.tokenize('\n')
+                        
+                        for (item in scriptList) {
+                            def sqlFile = item.trim()
+                            if (sqlFile && !sqlFile.startsWith("#")) {
+                                echo "====== EXECUTING: ${sqlFile} ======"
+                                sh "bash run_mysql.sh '${params.DB_HOST}' '${DB_USER}' '${params.DB_NAME}' '${sqlFile}'"
+                            }
+                        }
                     }
                 }
-            }
-        }
-        
-        stage('Archive & Cleanup Workspace') {
-            steps {
-                script {
-                    echo "Archiving logs before workspace cleanup..."
-                    sh '''
-                        mkdir -p ./logs/mysql
-                        cp -u /home/ubuntu/logs/mysql/*.log ./logs/mysql/ 2>/dev/null || true
-                    '''
-                }
-                archiveArtifacts artifacts: 'logs/**/*.log', allowEmptyArchive: true
-                
-                echo "Cleaning workspace after log archive and execution complete..."
-                cleanWs()
             }
         }
     }
     
     post {
         always {
-            script {
-                // If a stage failed before capture, ensure any fresh logs from this build are copied
-                sh '''
-                    if [ ! -d "./build_logs" ] || [ -z "$(ls -A ./build_logs 2>/dev/null)" ]; then
-                        mkdir -p ./build_logs
-                        LATEST_LOGS=$(ls -t /home/ubuntu/logs/mysql/*.log 2>/dev/null | head -n 2)
-                        for f in $LATEST_LOGS; do
-                            cp "$f" ./build_logs/
-                        done
-                    fi
-                '''
-            }
             archiveArtifacts artifacts: 'build_logs/*.log', allowEmptyArchive: true
         }
 
@@ -113,17 +101,16 @@ pipeline {
                     <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
                     <p><b>Target DB Host:</b> ${params.DB_HOST}</p>
                     <p><b>Database:</b> ${params.DB_NAME}</p>
-                    <p><b>Backup Script:</b> ${params.BACKUP_SCRIPT ?: 'None'}</p>
-                    <p><b>Executed Script:</b> ${params.EXECUTE_SCRIPT}</p>
+                    <p><b>Executed Scripts:</b><pre>${params.EXECUTE_SCRIPTS}</pre></p>
                     <p><b>Git Tag:</b> ${params.TAG_NAME}</p>
                     <p><b>Console URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
                     <br/>
-                    <p><i>Attached: Both latest backup and patch execution logs for this build.</i></p>
+                    <p><i>All execution logs generated during this run are attached to this email.</i></p>
                 """,
                 mimeType: 'text/html',
                 attachmentsPattern: 'build_logs/*.log'
             )
-            echo "Email sent with current run logs. Cleaning workspace..."
+            echo "Email sent. Cleaning workspace..."
             cleanWs()
         }
 
@@ -137,17 +124,16 @@ pipeline {
                     <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
                     <p><b>Target DB Host:</b> ${params.DB_HOST}</p>
                     <p><b>Database:</b> ${params.DB_NAME}</p>
-                    <p><b>Backup Script:</b> ${params.BACKUP_SCRIPT ?: 'None'}</p>
-                    <p><b>Executed Script:</b> ${params.EXECUTE_SCRIPT}</p>
+                    <p><b>Executed Scripts:</b><pre>${params.EXECUTE_SCRIPTS}</pre></p>
                     <p><b>Git Tag:</b> ${params.TAG_NAME}</p>
                     <p><b>Console URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
                     <br/>
-                    <p><i>Attached: Detailed execution error logs for this build.</i></p>
+                    <p><i>Check attached logs for failure details.</i></p>
                 """,
                 mimeType: 'text/html',
                 attachmentsPattern: 'build_logs/*.log'
             )
-            echo "Failure email sent with logs. Cleaning workspace..."
+            echo "Failure email sent. Cleaning workspace..."
             cleanWs()
         }
     }
