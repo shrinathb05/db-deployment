@@ -1,32 +1,32 @@
 pipeline {
-    agent {label 'node1' }
+    agent {label 'agent' }
     
-    parameters {
-        string(name: 'TAG_NAME', defaultValue: 'v0.7', description: 'Git tag to deploy')
+    // parameters {
+    //     string(name: 'TAG_NAME', defaultValue: 'v0.7', description: 'Git tag to deploy')
         
-        choice(
-            name: 'DB_HOST',
-            choices: ['10.181.63.162', '10.181.63.132', '10.181.63.125'],
-            description: 'Select Database Server'
-        )
+    //     choice(
+    //         name: 'DB_HOST',
+    //         choices: ['10.181.63.162', '10.181.63.132', '10.181.63.125'],
+    //         description: 'Select Database Server'
+    //     )
         
-        choice(
-            name: 'DB_NAME',
-            choices: ['jenkins', 'DEV', 'PRE-PROD', 'PROD'],
-            description: 'Select Database NAME'
-        )
+    //     choice(
+    //         name: 'DB_NAME',
+    //         choices: ['jenkins', 'DEV', 'PRE-PROD', 'PROD'],
+    //         description: 'Select Database NAME'
+    //     )
         
-        string(
-            name: 'BACKUP_SCRIPT',
-            defaultValue: '',
-            description: 'e.g. backup.sql file'
-        )
-        text(
-            name: 'EXECUTE_SCRIPT',
-            defaultValue: '',
-            description: 'Provide the sequence of the file for execution'
-        )
-    }
+    //     string(
+    //         name: 'BACKUP_SCRIPT',
+    //         defaultValue: '',
+    //         description: 'e.g. backup.sql file'
+    //     )
+    //     text(
+    //         name: 'EXECUTE_SCRIPT',
+    //         defaultValue: '',
+    //         description: 'Provide the sequence of the file for execution'
+    //     )
+    // }
     
     environment {
         GIT_REPO = "https://github.com/shrinathb05/db-deployment.git"
