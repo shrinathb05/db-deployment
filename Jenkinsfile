@@ -36,6 +36,7 @@ pipeline {
     stages {
         stage('Clean & Setup') {
             steps {
+                cleanWs()
                 sh """
                     mkdir -p "${WORK_DIR}"
                     rm -rf "${WORK_DIR}/*"
@@ -78,7 +79,7 @@ pipeline {
                                     echo "No backup name provided. Forcing failure to meet requirement..."
                                     sh "exit 1" // This forces the stage to fail
                                 } else {
-                                    sh "bash run_postgres.sh ${params.DB_HOST} \$DB_USER \$DB_PASS ${params.DB_NAME} ${params.BACKUP_SCRIPT}"
+                                    sh "bash run_mysql.sh ${params.DB_HOST} \$DB_USER \$DB_PASS ${params.DB_NAME} ${params.BACKUP_SCRIPT}"
                                 }
                             }
                         }
